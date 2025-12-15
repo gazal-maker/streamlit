@@ -35,6 +35,8 @@ import {
   ValueWithSource,
 } from "~lib/hooks/useBasicWidgetState"
 import { useEmotionTheme } from "~lib/hooks/useEmotionTheme"
+import { useQueryParamBinding } from "~lib/hooks/useQueryParamBinding"
+import { deserializeString, serializeString } from "~lib/queryParamSerializers"
 import {
   isNullOrUndefined,
   labelVisibilityProtoValueToEnum,
@@ -71,6 +73,16 @@ function TimeInput({
     widgetMgr,
     fragmentId,
   })
+
+  // Register query param binding if widget key starts with "?"
+  // TimeInput uses string value in HH:MM format which serializes directly
+  const { isBound, syncToUrl } = useQueryParamBinding<string | null>({
+    elementId: element.id,
+    widgetMgr,
+    serializer: serializeString,
+    deserializer: deserializeString,
+  })
+
   const isInSidebar = useContext(IsSidebarContext)
 
   const clearable = isNullOrUndefined(element.default) && !disabled
@@ -187,8 +199,13 @@ function TimeInput({
         newDate === null ? null : dateToString(newDate)
 
       setValueWithSource({ value: newValue, fromUi: true })
+
+      // Sync to URL if bound
+      if (isBound) {
+        syncToUrl(newValue)
+      }
     },
-    [setValueWithSource]
+    [setValueWithSource, isBound, syncToUrl]
   )
 
   const handleClear = useCallback((): void => {

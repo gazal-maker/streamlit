@@ -50,6 +50,11 @@ import {
   ValueWithSource,
 } from "~lib/hooks/useBasicWidgetState"
 import { useEmotionTheme } from "~lib/hooks/useEmotionTheme"
+import { useQueryParamBinding } from "~lib/hooks/useQueryParamBinding"
+import {
+  deserializeNumberRange,
+  serializeNumberRange,
+} from "~lib/queryParamSerializers"
 import { labelVisibilityProtoValueToEnum } from "~lib/util/utils"
 import { WidgetStateManager } from "~lib/WidgetStateManager"
 
@@ -124,6 +129,16 @@ function Slider({
     fragmentId,
   })
 
+  // Register query param binding if widget key starts with "?"
+  const { isBound, syncToUrl } = useQueryParamBinding<
+    [number, number] | number | null
+  >({
+    elementId: element.id,
+    widgetMgr,
+    serializer: serializeNumberRange,
+    deserializer: deserializeNumberRange,
+  })
+
   // We tie the UI to `uiValue` rather than `value` because `value` only
   // updates when the user is done interacting with the slider. If we tied
   // the UI to `value` then the UI would only update when the user is done
@@ -165,8 +180,18 @@ function Slider({
     ({ value: valueArg }: { value: number[] }): void => {
       setValueWithSource({ value: valueArg, fromUi: true })
       setIsDragging(false)
+
+      // Sync to URL if bound
+      if (isBound) {
+        // Convert array to range tuple or single value for serialization
+        const urlValue =
+          valueArg.length === 2
+            ? ([valueArg[0], valueArg[1]] as [number, number])
+            : valueArg[0]
+        syncToUrl(urlValue)
+      }
     },
-    [setValueWithSource]
+    [setValueWithSource, isBound, syncToUrl]
   )
 
   const handleChange = useCallback(

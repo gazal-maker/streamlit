@@ -47,6 +47,11 @@ import {
   ValueWithSource,
 } from "~lib/hooks/useBasicWidgetState"
 import { useEmotionTheme } from "~lib/hooks/useEmotionTheme"
+import { useQueryParamBinding } from "~lib/hooks/useQueryParamBinding"
+import {
+  deserializeDateStringArray,
+  serializeDateStringArray,
+} from "~lib/queryParamSerializers"
 import { hasLightBackgroundColor } from "~lib/theme"
 import {
   isNullOrUndefined,
@@ -109,6 +114,15 @@ function DateInput({
     element,
     widgetMgr,
     fragmentId,
+  })
+
+  // Register query param binding if widget key starts with "?"
+  // DateInput uses string array values in YYYY/MM/DD format
+  const { isBound, syncToUrl } = useQueryParamBinding<string[] | null>({
+    elementId: element.id,
+    widgetMgr,
+    serializer: serializeDateStringArray,
+    deserializer: deserializeDateStringArray,
   })
 
   const [isEmpty, setIsEmpty] = useState(false)
@@ -203,6 +217,10 @@ function DateInput({
       if (isNullOrUndefined(date)) {
         setValueWithSource({ value: [], fromUi: true })
         setIsEmpty(true)
+        // Sync empty value to URL if bound
+        if (isBound) {
+          syncToUrl(null)
+        }
         return
       }
 
@@ -232,8 +250,21 @@ function DateInput({
       }
       setValueWithSource({ value: newDates, fromUi: true })
       setIsEmpty(!newDates)
+
+      // Sync to URL if bound (convert Dates to strings in YYYY/MM/DD format)
+      if (isBound && newDates.length > 0) {
+        syncToUrl(datesToStrings(newDates))
+      }
     },
-    [setValueWithSource, createErrorMessage, setError, minDate, maxDate]
+    [
+      setValueWithSource,
+      createErrorMessage,
+      setError,
+      minDate,
+      maxDate,
+      isBound,
+      syncToUrl,
+    ]
   )
 
   const handleClose = useCallback((): void => {
