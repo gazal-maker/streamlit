@@ -94,6 +94,7 @@ class AppSession:
         message_enqueued_callback: Callable[[], None] | None,
         user_info: dict[str, str | bool | None],
         session_id_override: str | None = None,
+        initial_query_string: str = "",
     ) -> None:
         """Initialize the AppSession.
 
@@ -128,10 +129,16 @@ class AppSession:
             The ID to assign to this session. Setting this can be useful when the
             service that a Streamlit Runtime is running in wants to tie the lifecycle of
             a Streamlit session to some other session-like object that it manages.
+
+        initial_query_string
+            The initial URL query string from the client (without leading "?").
+            Used to initialize widget values from URL query parameters for widgets
+            with keys starting with "?".
         """
 
         # Each AppSession has a unique string ID.
         self.id = session_id_override or str(uuid.uuid4())
+        self._initial_query_string = initial_query_string
 
         self._event_loop = asyncio.get_running_loop()
         self._script_data = script_data
@@ -167,7 +174,9 @@ class AppSession:
         # This needs to be lazily imported to avoid a dependency cycle.
         from streamlit.runtime.state import SessionState
 
-        self._session_state = SessionState()
+        self._session_state = SessionState(
+            initial_query_string=initial_query_string,
+        )
         self._user_info = user_info
 
         self._debug_last_backmsg_id: str | None = None

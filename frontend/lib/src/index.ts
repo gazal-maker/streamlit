@@ -108,6 +108,24 @@ export {
   mockSessionInfoProps,
 } from "./mocks/mocks"
 export { mockTheme } from "./mocks/mockTheme"
+export {
+  deserializeBool,
+  deserializeColor,
+  deserializeNumber,
+  deserializeString,
+  extractQueryParamName,
+  getLastValue,
+  isQueryParamKey,
+  QUERY_PARAM_KEY_PREFIX,
+  serializeBool,
+  serializeColor,
+  serializeNumber,
+  serializeString,
+} from "./queryParamSerializers"
+export type {
+  QueryParamDeserializer,
+  QueryParamSerializer,
+} from "./queryParamSerializers"
 export { RootStyleProvider } from "./RootStyleProvider"
 export { ScriptRunState } from "./ScriptRunState"
 export { SessionInfo } from "./SessionInfo"
@@ -182,4 +200,4 @@ export {
   setCookie,
 } from "./util/utils"
 export { createFormsData, WidgetStateManager } from "./WidgetStateManager"
-export type { FormsData } from "./WidgetStateManager"
+export type { FormsData, QueryParamBinding } from "./WidgetStateManager"

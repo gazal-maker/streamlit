@@ -37,8 +37,10 @@ import {
 import { useCalculatedDimensions } from "~lib/hooks/useCalculatedDimensions"
 import { useEmotionTheme } from "~lib/hooks/useEmotionTheme"
 import useOnInputChange from "~lib/hooks/useOnInputChange"
+import { useQueryParamBinding } from "~lib/hooks/useQueryParamBinding"
 import useSubmitFormViaEnterKey from "~lib/hooks/useSubmitFormViaEnterKey"
 import useUpdateUiValue from "~lib/hooks/useUpdateUiValue"
+import { deserializeString, serializeString } from "~lib/queryParamSerializers"
 import { isInForm, labelVisibilityProtoValueToEnum } from "~lib/util/utils"
 import { WidgetStateManager } from "~lib/WidgetStateManager"
 
@@ -57,6 +59,14 @@ function TextInput({
   widgetMgr,
   fragmentId,
 }: Props): ReactElement {
+  // Register query param binding if widget key starts with "?"
+  const { isBound, syncToUrl } = useQueryParamBinding<string | null>({
+    elementId: element.id,
+    widgetMgr,
+    serializer: serializeString,
+    deserializer: deserializeString,
+  })
+
   /**
    * The value specified by the user via the UI. If the user didn't touch this
    * widget's UI, the default value is used.
@@ -105,7 +115,11 @@ function TextInput({
   const commitWidgetValue = useCallback((): void => {
     setDirty(false)
     setValueWithSource({ value: uiValue, fromUi: true })
-  }, [uiValue, setValueWithSource])
+    // Sync to URL if bound
+    if (isBound) {
+      syncToUrl(uiValue)
+    }
+  }, [uiValue, setValueWithSource, isBound, syncToUrl])
 
   // Show "Please enter" instructions if in a form & allowed, or not in form and state is dirty.
   const allowEnterToSubmit = isInForm({ formId })

@@ -40,6 +40,8 @@ import {
 import { useFormClearHelper } from "~lib/components/widgets/Form"
 import { useCalculatedDimensions } from "~lib/hooks/useCalculatedDimensions"
 import { useEmotionTheme } from "~lib/hooks/useEmotionTheme"
+import { useQueryParamBinding } from "~lib/hooks/useQueryParamBinding"
+import { deserializeNumber, serializeNumber } from "~lib/queryParamSerializers"
 import { convertRemToPx } from "~lib/theme"
 import {
   isInForm,
@@ -88,6 +90,14 @@ const NumberInput: React.FC<Props> = ({
     min,
     max,
   } = element
+
+  // Register query param binding if widget key starts with "?"
+  const { isBound, syncToUrl } = useQueryParamBinding<number | null>({
+    elementId: elementId,
+    widgetMgr,
+    serializer: serializeNumber,
+    deserializer: deserializeNumber,
+  })
 
   const { width, elementRef } = useCalculatedDimensions()
 
@@ -177,6 +187,11 @@ const NumberInput: React.FC<Props> = ({
             throw new Error("Invalid data type")
         }
 
+        // Sync to URL if bound
+        if (source.fromUi && isBound) {
+          syncToUrl(newValue)
+        }
+
         setDirty(false)
         setValue(newValue)
         setFormattedValue(
@@ -201,6 +216,8 @@ const NumberInput: React.FC<Props> = ({
       elementFormId,
       elementDefault,
       elementFormat,
+      isBound,
+      syncToUrl,
     ]
   )
 
