@@ -160,6 +160,26 @@ class StarletteServerUtilsTest(unittest.TestCase):
         )
         assert result is None
 
+    def test_decode_signed_value_empty_value(self):
+        """Test that empty value returns None."""
+        secret = "test_secret_key"
+        name = "test_cookie"
+
+        # Empty string
+        assert starlette_app_utils.decode_signed_value(secret, name, "") is None
+        # Empty bytes
+        assert starlette_app_utils.decode_signed_value(secret, name, b"") is None
+
+    def test_decode_signed_value_non_utf8_bytes(self):
+        """Test that non-UTF-8 bytes return None instead of raising."""
+        secret = "test_secret_key"
+        name = "test_cookie"
+        # Invalid UTF-8 sequence
+        invalid_utf8 = b"\xff\xfe\x00\x01"
+
+        result = starlette_app_utils.decode_signed_value(secret, name, invalid_utf8)
+        assert result is None
+
     def test_xsrf_token_roundtrip(self):
         """Test generating and then decoding an XSRF token."""
         token = b"some_random_token_bytes"
@@ -206,6 +226,16 @@ class StarletteServerUtilsTest(unittest.TestCase):
             None,
             None,
         )
+
+    def test_decode_xsrf_token_empty(self):
+        """Test that empty/whitespace-only strings return (None, None)."""
+        # Empty string
+        assert starlette_app_utils.decode_xsrf_token_string("") == (None, None)
+        # Whitespace only (stripped to empty)
+        assert starlette_app_utils.decode_xsrf_token_string("   ") == (None, None)
+        # Only quotes (stripped to empty)
+        assert starlette_app_utils.decode_xsrf_token_string('""') == (None, None)
+        assert starlette_app_utils.decode_xsrf_token_string("''") == (None, None)
 
     def test_generate_random_hex_string_default(self):
         """Test generate_random_hex_string with default length."""

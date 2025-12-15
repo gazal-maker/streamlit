@@ -167,11 +167,14 @@ def decode_signed_value(
     """
     from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
-    serializer = URLSafeTimedSerializer(secret, salt=name)
-    if isinstance(value, bytes):
-        value = value.decode("utf-8")
+    if not value:
+        return None
 
     try:
+        if isinstance(value, bytes):
+            value = value.decode("utf-8")
+
+        serializer = URLSafeTimedSerializer(secret, salt=name)
         decoded = serializer.loads(value, max_age=int(max_age_days * 86400))
         if isinstance(decoded, str):
             return decoded.encode("utf-8")
@@ -179,7 +182,7 @@ def decode_signed_value(
             return decoded
         # Fallback: convert to string then bytes if unexpected type
         return str(decoded).encode("utf-8")
-    except (BadSignature, SignatureExpired):
+    except (BadSignature, SignatureExpired, UnicodeDecodeError):
         return None
 
 
@@ -233,7 +236,13 @@ def decode_xsrf_token_string(
     tuple[bytes | None, int | None]
         A tuple of (token_bytes, timestamp). Both values are None if decoding fails.
     """
+    if not cookie_value:
+        return None, None
+
     value = cookie_value.strip("\"'")
+    if not value:
+        return None, None
+
     try:
         if value.startswith("2|"):
             _, mask_hex, masked_hex, timestamp_str = value.split("|")
@@ -243,6 +252,8 @@ def decode_xsrf_token_string(
             return token, int(timestamp_str)
 
         token = binascii.a2b_hex(value.encode("ascii"))
+        if not token:
+            return None, None
         return token, int(time.time())
     except (binascii.Error, ValueError):
         return None, None
