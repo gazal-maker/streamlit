@@ -39,17 +39,24 @@ _EXCLUDED_CONTENT_TYPES: Final = (
 )
 
 
+def _handle_response_start(
+    responder: IdentityResponder | GZipResponder, message: Message
+) -> None:
+    """Handle http.response.start message for media-aware responders."""
+    responder.initial_message = message
+    headers = Headers(raw=responder.initial_message["headers"])
+    responder.content_encoding_set = "content-encoding" in headers
+    responder.content_type_is_excluded = headers.get("content-type", "").startswith(
+        _EXCLUDED_CONTENT_TYPES
+    )
+
+
 class _MediaAwareIdentityResponder(IdentityResponder):
     """IdentityResponder that excludes audio/video from compression."""
 
     async def send_with_compression(self, message: Message) -> None:
         if message["type"] == "http.response.start":
-            self.initial_message = message
-            headers = Headers(raw=self.initial_message["headers"])
-            self.content_encoding_set = "content-encoding" in headers
-            self.content_type_is_excluded = headers.get("content-type", "").startswith(
-                _EXCLUDED_CONTENT_TYPES
-            )
+            _handle_response_start(self, message)
         else:
             await super().send_with_compression(message)
 
@@ -59,12 +66,7 @@ class _MediaAwareGZipResponder(GZipResponder):
 
     async def send_with_compression(self, message: Message) -> None:
         if message["type"] == "http.response.start":
-            self.initial_message = message
-            headers = Headers(raw=self.initial_message["headers"])
-            self.content_encoding_set = "content-encoding" in headers
-            self.content_type_is_excluded = headers.get("content-type", "").startswith(
-                _EXCLUDED_CONTENT_TYPES
-            )
+            _handle_response_start(self, message)
         else:
             await super().send_with_compression(message)
 

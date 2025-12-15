@@ -189,6 +189,18 @@ def generate_xsrf_token_string(
     """Generate a version 2 XSRF token string compatible with Tornado.
 
     Format: 2|mask|masked_token|timestamp
+
+    Parameters
+    ----------
+    token_bytes
+        The raw token bytes to encode. If None, generates 16 random bytes.
+    timestamp
+        The Unix timestamp to include in the token. If None, uses current time.
+
+    Returns
+    -------
+    str
+        The encoded XSRF token string in version 2 format.
     """
     if token_bytes is None:
         token_bytes = os.urandom(16)
@@ -210,6 +222,16 @@ def decode_xsrf_token_string(
     """Decode a Tornado XSRF token string.
 
     Supports version 2 (masked) and version 1 (unmasked) tokens.
+
+    Parameters
+    ----------
+    cookie_value
+        The XSRF token cookie value to decode.
+
+    Returns
+    -------
+    tuple[bytes | None, int | None]
+        A tuple of (token_bytes, timestamp). Both values are None if decoding fails.
     """
     value = cookie_value.strip("\"'")
     try:
