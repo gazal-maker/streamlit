@@ -244,6 +244,7 @@ def decode_xsrf_token_string(
         return None, None
 
     try:
+        # V2 tokens:
         if value.startswith("2|"):
             _, mask_hex, masked_hex, timestamp_str = value.split("|")
             mask = binascii.a2b_hex(mask_hex.encode("ascii"))
@@ -251,6 +252,9 @@ def decode_xsrf_token_string(
             token = websocket_mask(mask, masked)
             return token, int(timestamp_str)
 
+        # V1 tokens:
+        # TODO(lukasmasuch): This is likely unused in Streamlit since only V2 tokens
+        # are used. We might be able to just remove this part.
         token = binascii.a2b_hex(value.encode("ascii"))
         if not token:
             return None, None
