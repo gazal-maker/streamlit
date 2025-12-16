@@ -254,6 +254,9 @@ def decode_xsrf_token_string(
         token = binascii.a2b_hex(value.encode("ascii"))
         if not token:
             return None, None
+        # V1 tokens don't have an embedded timestamp, so we use current time
+        # as a placeholder (matches Tornado's behavior). This timestamp is
+        # informational only and not used for token validation.
         return token, int(time.time())
     except (binascii.Error, ValueError):
         return None, None
