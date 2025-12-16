@@ -29,7 +29,7 @@ SESSION_COOKIE_NAME: Final = "_streamlit_session"
 # Each connected client has its own queue; under normal conditions the queue drains
 # continuously and rarely exceeds single digits. This limit protects against slow
 # clients (bad network, paused tabs) causing unbounded server memory growth.
-# With N concurrent users, worst case memory is N * _MAX_SEND_QUEUE_SIZE * msg_size.
+# With N concurrent users, worst case memory is N * WEBSOCKET_MAX_SEND_QUEUE_SIZE * msg_size.
 WEBSOCKET_MAX_SEND_QUEUE_SIZE: Final = 500
 
 # Gzip middleware configuration:
