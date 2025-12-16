@@ -180,8 +180,8 @@ def decode_signed_value(
             return decoded.encode("utf-8")
         if isinstance(decoded, bytes):
             return decoded
-        # Fallback: convert to string then bytes if unexpected type
-        return str(decoded).encode("utf-8")
+        # Unexpected type from deserializer — treat as invalid
+        return None
     except (BadSignature, SignatureExpired, UnicodeDecodeError):
         return None
 
