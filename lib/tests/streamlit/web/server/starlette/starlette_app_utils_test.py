@@ -258,3 +258,68 @@ class StarletteServerUtilsTest(unittest.TestCase):
         results = {starlette_app_utils.generate_random_hex_string() for _ in range(100)}
         # All 100 should be unique
         assert len(results) == 100
+
+
+class TestValidateXsrfToken:
+    """Tests for validate_xsrf_token function."""
+
+    def test_returns_false_when_supplied_token_none(self) -> None:
+        """Test that False is returned when supplied token is None."""
+        xsrf_cookie = starlette_app_utils.generate_xsrf_token_string()
+
+        result = starlette_app_utils.validate_xsrf_token(None, xsrf_cookie)
+
+        assert result is False
+
+    def test_returns_false_when_cookie_none(self) -> None:
+        """Test that False is returned when cookie is None."""
+        xsrf_token = starlette_app_utils.generate_xsrf_token_string()
+
+        result = starlette_app_utils.validate_xsrf_token(xsrf_token, None)
+
+        assert result is False
+
+    def test_returns_false_when_both_none(self) -> None:
+        """Test that False is returned when both are None."""
+        result = starlette_app_utils.validate_xsrf_token(None, None)
+
+        assert result is False
+
+    def test_returns_true_for_matching_tokens(self) -> None:
+        """Test that True is returned when tokens match."""
+        xsrf_token = starlette_app_utils.generate_xsrf_token_string()
+
+        result = starlette_app_utils.validate_xsrf_token(xsrf_token, xsrf_token)
+
+        assert result is True
+
+    def test_returns_true_for_matching_tokens_with_different_timestamps(self) -> None:
+        """Test that validation succeeds when tokens have same bytes but different timestamps."""
+        token_bytes = b"0123456789abcdef"
+        token1 = starlette_app_utils.generate_xsrf_token_string(
+            token_bytes, timestamp=12345
+        )
+        token2 = starlette_app_utils.generate_xsrf_token_string(
+            token_bytes, timestamp=67890
+        )
+
+        result = starlette_app_utils.validate_xsrf_token(token1, token2)
+
+        assert result is True
+
+    def test_returns_false_for_different_tokens(self) -> None:
+        """Test that False is returned when tokens differ."""
+        token1 = starlette_app_utils.generate_xsrf_token_string()
+        token2 = starlette_app_utils.generate_xsrf_token_string()
+
+        result = starlette_app_utils.validate_xsrf_token(token1, token2)
+
+        assert result is False
+
+    def test_returns_false_for_invalid_token_format(self) -> None:
+        """Test that False is returned for invalid token format."""
+        valid_token = starlette_app_utils.generate_xsrf_token_string()
+
+        result = starlette_app_utils.validate_xsrf_token("invalid-token", valid_token)
+
+        assert result is False
