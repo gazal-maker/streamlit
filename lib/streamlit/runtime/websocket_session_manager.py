@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from typing import TYPE_CHECKING, Final, cast
 
 from streamlit.logger import get_logger
@@ -28,6 +29,7 @@ from streamlit.runtime.session_manager import (
 )
 from streamlit.runtime.stats import (
     ACTIVE_SESSIONS_FAMILY,
+    SESSION_DURATION_FAMILY,
     SESSION_EVENTS_FAMILY,
     CounterStat,
     GaugeStat,
@@ -62,7 +64,7 @@ class WebsocketSessionManager(SessionManager, StatsProvider):
 
     @property
     def stats_families(self) -> Sequence[str]:
-        return (SESSION_EVENTS_FAMILY, ACTIVE_SESSIONS_FAMILY)
+        return (SESSION_EVENTS_FAMILY, SESSION_DURATION_FAMILY, ACTIVE_SESSIONS_FAMILY)
 
     def __init__(
         self,
@@ -84,6 +86,10 @@ class WebsocketSessionManager(SessionManager, StatsProvider):
         self._connect_count: int = 0
         self._reconnect_count: int = 0
         self._disconnect_count: int = 0
+
+        # Session duration tracking
+        self._session_connect_times: dict[str, float] = {}
+        self._total_session_duration_seconds: float = 0
 
     def connect_session(
         self,
@@ -124,6 +130,7 @@ class WebsocketSessionManager(SessionManager, StatsProvider):
 
             with self._stats_lock:
                 self._reconnect_count += 1
+                self._session_connect_times[existing_session.id] = time.monotonic()
             return existing_session.id
 
         session = AppSession(
@@ -148,6 +155,7 @@ class WebsocketSessionManager(SessionManager, StatsProvider):
         self._active_session_info_by_id[session.id] = ActiveSessionInfo(client, session)
         with self._stats_lock:
             self._connect_count += 1
+            self._session_connect_times[session.id] = time.monotonic()
         return session.id
 
     def disconnect_session(self, session_id: str) -> None:
@@ -168,6 +176,7 @@ class WebsocketSessionManager(SessionManager, StatsProvider):
             del self._active_session_info_by_id[session_id]
             with self._stats_lock:
                 self._disconnect_count += 1
+                self._accumulate_session_duration(session_id)
 
         if not self._active_session_info_by_id:
             # Avoid stale cached scripts when all file watchers and sessions are disconnected
@@ -190,6 +199,7 @@ class WebsocketSessionManager(SessionManager, StatsProvider):
             # Count disconnect for active sessions being closed directly
             with self._stats_lock:
                 self._disconnect_count += 1
+                self._accumulate_session_duration(session_id)
 
             if not self._active_session_info_by_id:
                 # Avoid stale cached scripts when all file watchers and sessions are disconnected
@@ -202,6 +212,18 @@ class WebsocketSessionManager(SessionManager, StatsProvider):
         if session_info:
             self._session_storage.delete(session_id)
             session_info.session.shutdown()
+            with self._stats_lock:
+                self._accumulate_session_duration(session_id)
+
+    def _accumulate_session_duration(self, session_id: str) -> None:
+        """Accumulate the session duration for a closed session.
+
+        This method must be called while holding self._stats_lock.
+        """
+        connect_time = self._session_connect_times.pop(session_id, None)
+        if connect_time is not None:
+            duration = time.monotonic() - connect_time
+            self._total_session_duration_seconds += duration
 
     def get_session_info(self, session_id: str) -> SessionInfo | None:
         session_info = self.get_active_session_info(session_id)
@@ -249,6 +271,19 @@ class WebsocketSessionManager(SessionManager, StatsProvider):
                     value=disconnect_count,
                     labels={"type": _EVENT_TYPE_DISCONNECT},
                     help="Total count of session events by type.",
+                ),
+            ]
+
+        if family_names is None or SESSION_DURATION_FAMILY in family_names:
+            with self._stats_lock:
+                total_duration = int(self._total_session_duration_seconds)
+
+            result[SESSION_DURATION_FAMILY] = [
+                CounterStat(
+                    family_name=SESSION_DURATION_FAMILY,
+                    value=total_duration,
+                    unit="seconds",
+                    help="Total time spent in active sessions, in seconds.",
                 ),
             ]
 
