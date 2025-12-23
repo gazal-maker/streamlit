@@ -20,6 +20,8 @@ from typing import Final
 
 # Cookie name for storing signed user identity information.
 USER_COOKIE_NAME: Final = "_streamlit_user"
+# Cookie name for storing signed OAuth tokens (access_token, id_token).
+TOKENS_COOKIE_NAME: Final = "_streamlit_user_tokens"
 # Cookie name for Cross-Site Request Forgery (XSRF) token validation.
 XSRF_COOKIE_NAME: Final = "_streamlit_xsrf"
 # Cookie name for server-side session management.
