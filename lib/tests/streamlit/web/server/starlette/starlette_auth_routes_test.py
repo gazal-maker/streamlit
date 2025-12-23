@@ -275,8 +275,15 @@ class TestAuthCookieFlags:
             response = client.get("/oauth2callback?state=abc", follow_redirects=False)
             assert response.status_code == 302
 
+            set_cookie_headers = response.headers.get_list("set-cookie")
+            user_cookie_header = next(
+                (h for h in set_cookie_headers if h.startswith("_streamlit_user=")),
+                None,
+            )
+            assert user_cookie_header is not None, "User cookie not found"
+
             cookies = SimpleCookie()
-            cookies.load(response.headers["set-cookie"])
+            cookies.load(user_cookie_header)
             cookie = cookies["_streamlit_user"]
 
             # Check httponly flag
@@ -326,8 +333,15 @@ class TestAuthCookieFlags:
             )
             assert response.status_code == 302
 
+            set_cookie_headers = response.headers.get_list("set-cookie")
+            user_cookie_header = next(
+                (h for h in set_cookie_headers if h.startswith("_streamlit_user=")),
+                None,
+            )
+            assert user_cookie_header is not None, "User cookie not found"
+
             cookies = SimpleCookie()
-            cookies.load(response.headers["set-cookie"])
+            cookies.load(user_cookie_header)
             cookie = cookies["_streamlit_user"]
 
             # Check path matches baseUrlPath

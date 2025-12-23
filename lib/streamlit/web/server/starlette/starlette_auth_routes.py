@@ -16,22 +16,29 @@
 
 from __future__ import annotations
 
-import json
 import time
 from typing import TYPE_CHECKING, Any, Final, cast
 from urllib.parse import urlparse
 
 from streamlit.auth_util import (
+    clear_cookie_and_chunks,
     decode_provider_token,
     generate_default_provider_section,
     get_secrets_auth_section,
+    set_cookie_with_chunks,
 )
 from streamlit.errors import StreamlitAuthError
 from streamlit.logger import get_logger
 from streamlit.url_util import make_url_path
 from streamlit.web.server.server_util import get_cookie_secret
-from streamlit.web.server.starlette.starlette_app_utils import create_signed_value
-from streamlit.web.server.starlette.starlette_server_config import USER_COOKIE_NAME
+from streamlit.web.server.starlette.starlette_app_utils import (
+    create_signed_value,
+    decode_signed_value,
+)
+from streamlit.web.server.starlette.starlette_server_config import (
+    TOKENS_COOKIE_NAME,
+    USER_COOKIE_NAME,
+)
 
 if TYPE_CHECKING:
     from starlette.requests import Request
@@ -177,13 +184,40 @@ def _get_cookie_path() -> str:
     return "/"
 
 
-async def _set_auth_cookie(response: Response, user_info: dict[str, Any]) -> None:
-    """Set the auth cookie with signed user info.
+async def _set_auth_cookie(
+    response: Response, user_info: dict[str, Any], tokens: dict[str, Any]
+) -> None:
+    """Set the auth cookies with signed user info and tokens.
 
     Note: This cookie uses itsdangerous signing which is NOT compatible with
     Tornado's secure cookie format. Switching between backends will invalidate
     existing auth cookies, requiring users to re-authenticate. This is expected
     behavior when switching between Tornado and Starlette backends.
+
+    Cookies may be split into multiple chunks if they exceed browser limits.
+    """
+
+    def set_single_cookie(cookie_name: str, value: str) -> None:
+        _set_single_cookie(response, cookie_name, value)
+
+    set_cookie_with_chunks(
+        set_single_cookie,
+        _create_signed_value_wrapper,
+        USER_COOKIE_NAME,
+        user_info,
+    )
+    set_cookie_with_chunks(
+        set_single_cookie,
+        _create_signed_value_wrapper,
+        TOKENS_COOKIE_NAME,
+        tokens,
+    )
+
+
+def _set_single_cookie(
+    response: Response, cookie_name: str, serialized_value: str
+) -> None:
+    """Set a single signed cookie on the response.
 
     Cookie flags are set explicitly for clarity and parity with Tornado:
     - httponly=True: Prevents JavaScript access (security)
@@ -192,19 +226,11 @@ async def _set_auth_cookie(response: Response, user_info: dict[str, Any]) -> Non
       the OIDC flow only works in secure contexts anyway (localhost or HTTPS)
     - path: Matches server.baseUrlPath for proper scoping
     """
-    serialized_cookie_value = json.dumps(user_info)
-    if len(serialized_cookie_value.encode()) > 4096:
-        _LOGGER.warning(
-            "Authentication cookie size exceeds maximum browser limit of 4096 bytes. Authentication may fail."
-        )
-
     cookie_secret = get_cookie_secret()
-    signed_value = create_signed_value(
-        cookie_secret, USER_COOKIE_NAME, serialized_cookie_value
-    )
+    signed_value = create_signed_value(cookie_secret, cookie_name, serialized_value)
     cookie_payload = signed_value.decode("utf-8")
     response.set_cookie(
-        USER_COOKIE_NAME,
+        cookie_name,
         cookie_payload,
         httponly=True,
         samesite="lax",
@@ -212,13 +238,51 @@ async def _set_auth_cookie(response: Response, user_info: dict[str, Any]) -> Non
     )
 
 
-def _clear_auth_cookie(response: Response) -> None:
-    """Clear the auth cookie.
+def _create_signed_value_wrapper(cookie_name: str, value: str) -> bytes:
+    """Create a signed cookie value using the cookie secret."""
+    cookie_secret = get_cookie_secret()
+    return create_signed_value(cookie_secret, cookie_name, value)
+
+
+def _get_signed_cookie_from_request(request: Request, cookie_name: str) -> bytes | None:
+    """Get and decode a signed cookie from the request.
+
+    This helper is used during logout to determine if cookies need chunk cleanup.
+    """
+    cookie_value = request.cookies.get(cookie_name)
+    if cookie_value is None:
+        return None
+
+    cookie_secret = get_cookie_secret()
+    signed_value = cookie_value.encode("latin-1")
+    decoded = decode_signed_value(cookie_secret, cookie_name, signed_value)
+    return decoded
+
+
+def _clear_auth_cookie(response: Response, request: Request) -> None:
+    """Clear the auth cookies, including any split cookie chunks.
 
     The path must match the path used when setting the cookie, otherwise
     the browser won't delete it.
     """
-    response.delete_cookie(USER_COOKIE_NAME, path=_get_cookie_path())
+    cookie_path = _get_cookie_path()
+
+    def get_single_cookie(cookie_name: str) -> bytes | None:
+        return _get_signed_cookie_from_request(request, cookie_name)
+
+    def clear_single_cookie(cookie_name: str) -> None:
+        response.delete_cookie(cookie_name, path=cookie_path)
+
+    clear_cookie_and_chunks(
+        get_single_cookie,
+        clear_single_cookie,
+        USER_COOKIE_NAME,
+    )
+    clear_cookie_and_chunks(
+        get_single_cookie,
+        clear_single_cookie,
+        TOKENS_COOKIE_NAME,
+    )
 
 
 def _create_oauth_client(provider: str) -> tuple[Any, str]:
@@ -336,11 +400,11 @@ async def _auth_login(request: Request, base_url: str) -> Response:
         return Response("Authentication error", status_code=400)
 
 
-async def _auth_logout(_request: Request, base_url: str) -> Response:
+async def _auth_logout(request: Request, base_url: str) -> Response:
     """Logout the user by clearing the auth cookie and redirecting to the base URL."""
 
     response = await _redirect_to_base(base_url)
-    _clear_auth_cookie(response)
+    _clear_auth_cookie(response, request)
     return response
 
 
@@ -388,8 +452,9 @@ async def _auth_callback(request: Request, base_url: str) -> Response:
     response = await _redirect_to_base(base_url)
 
     cookie_value = dict(user, origin=origin, is_logged_in=True)
+    tokens = {k: token[k] for k in ["id_token", "access_token"] if k in token}
     if user:
-        await _set_auth_cookie(response, cookie_value)
+        await _set_auth_cookie(response, cookie_value, tokens)
     else:  # pragma: no cover - error path
         _LOGGER.error(
             "OAuth provider '%s' did not return user information during callback.",
